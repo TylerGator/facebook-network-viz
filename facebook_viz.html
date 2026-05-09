@@ -148,10 +148,18 @@
 </head>
 <body>
 
-<!-- DROP ZONE -->
+<!-- DROP ZONE / AUTO-LOAD SCREEN -->
 <div id="dropzone">
   <h1>FACEBOOK<br><em>SOCIAL NETWORK</em></h1>
-  <div class="drop-box" id="drop-box">
+
+  <!-- Shown while auto-fetching -->
+  <div id="auto-load-msg" style="text-align:center">
+    <div style="font-family:'Space Mono',monospace;font-size:11px;color:#555;margin-bottom:12px">Loading network data…</div>
+    <div style="width:200px;height:1px;background:#1e2028;margin:0 auto"><div id="fetch-bar" style="height:100%;background:var(--accent);width:0%;transition:width .4s"></div></div>
+  </div>
+
+  <!-- Shown only if auto-fetch fails -->
+  <div class="drop-box" id="drop-box" style="display:none">
     <svg class="drop-icon" viewBox="0 0 40 40" fill="none" stroke="#888" stroke-width="1.5" stroke-linecap="round">
       <rect x="4" y="8" width="32" height="26" rx="2"/>
       <path d="M20 18v10M15 23l5-5 5 5"/>
@@ -256,20 +264,45 @@ const appEl  = $('app');
 const canvas = $('gc');
 const ctx    = canvas.getContext('2d');
 
-/* ── FILE HANDLING ─── */
+/* ── AUTO-FETCH ON LOAD ─── */
+window.addEventListener('load', async () => {
+  const bar = $('fetch-bar');
+  try {
+    bar.style.width = '30%';
+    const resp = await fetch('./facebook_combined.txt.gz');
+    if (!resp.ok) throw new Error('not found');
+    bar.style.width = '70%';
+    const buf = await resp.arrayBuffer();
+    bar.style.width = '100%';
+    await sleep(120);
+    go(buf);
+  } catch(_) {
+    // Auto-fetch failed (e.g. running locally without the file) — show manual drop zone
+    $('auto-load-msg').style.display = 'none';
+    $('drop-box').style.display = '';
+  }
+});
+
+/* ── FILE HANDLING (manual fallback) ─── */
 $('drop-box').addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragging'); });
 $('drop-box').addEventListener('dragleave', () => dz.classList.remove('dragging'));
 $('drop-box').addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('dragging'); if (e.dataTransfer.files[0]) go(e.dataTransfer.files[0]); });
 $('drop-box').addEventListener('click', e => { if (e.target.tagName !== 'BUTTON') $('file-input').click(); });
 $('file-input').addEventListener('change', e => { if (e.target.files[0]) go(e.target.files[0]); });
 
-async function go(file) {
+// go() accepts either a File object or an ArrayBuffer (from auto-fetch)
+async function go(source) {
   dz.classList.add('fade-out');
   procEl.classList.add('active');
   await sleep(200);
   try {
     step('Decompressing…', 10); await sleep(30);
-    let text = file.name.endsWith('.gz') ? await ungzip(await file.arrayBuffer()) : await file.text();
+    let text;
+    if (source instanceof ArrayBuffer) {
+      text = await ungzip(source);
+    } else {
+      text = source.name.endsWith('.gz') ? await ungzip(await source.arrayBuffer()) : await source.text();
+    }
 
     step('Parsing edge list…', 22); await sleep(30);
     const edges = parseEdges(text);

@@ -1,0 +1,8 @@
+.DS_Store
+gh_config/
+check_gh.command
+gh_auth.command
+gh_fix.command
+gh_login.command
+install_gh.command
+publish.command
